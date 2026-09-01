@@ -159,24 +159,34 @@ class _CategoricalCaster:
     end-to-end.
     """
 
+
     def __init__(self):
         self.numeric_medians_ = None
+        self.categories_ = {}  # col -> fitted category list (includes "missing")
 
     def fit(self, X: pd.DataFrame, y=None):
         self.numeric_medians_ = X[NUMERIC_FEATURES].median()
+        for col in CATEGORICAL_FEATURES:
+            vals = X[col].astype("object").fillna("missing").astype(str)
+            cats = sorted(vals.unique().tolist())
+            if "missing" not in cats:
+                cats.append("missing")
+            self.categories_[col] = cats
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X = X.copy()
-
         X[NUMERIC_FEATURES] = X[NUMERIC_FEATURES].fillna(self.numeric_medians_)
 
         for col in CATEGORICAL_FEATURES:
-            X[col] = X[col].astype("object").fillna("missing").astype("category")
+            vals = X[col].astype("object").fillna("missing").astype(str)
+            cat_dtype = pd.CategoricalDtype(categories=self.categories_[col])
+            casted = vals.astype(cat_dtype)          # unseen values -> NaN
+            X[col] = casted.fillna("missing")         # map unseen -> "missing" bucket
 
         return X[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
 
-    def fit_transform(self, X: pd.DataFrame, y=None) -> pd.DataFrame:
+    def fit_transform(self, X, y=None):
         return self.fit(X, y).transform(X)
 
     # get_params/set_params so this plays nicely inside an sklearn
